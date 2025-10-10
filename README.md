@@ -29,18 +29,17 @@ It demonstrates how to build a complete, interactive, and visually sleek desktop
 
 PingPong/
 │
-├── game.h # The entire game logic and UI system (single header)
-├── main.cpp # Entry point and main loop
+├── game.h        # The entire game logic and UI system (single header)
+├── main.cpp      # Entry point and main loop
 │
-├── resource.h # Resource identifiers
-├── app.rc # Win32 resource script (icon, menu, etc.)
-├── app.ico # Application icon
-├── app_res.o # Compiled resource object (generated)
+├── resource.h    # Resource identifiers
+├── app.rc        # Win32 resource script (icon, menu, etc.)
+├── app.ico       # Application icon
+├── app_res.o     # Compiled resource object (generated)
 │
-├── build.bat # Build script (for quick compilation)
+├── build.bat     # Build script (for quick compilation)
 │
 └── README.md
-
 
 ---
 
