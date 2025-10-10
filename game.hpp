@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
+#include <libloaderapi.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <winuser.h>
 
 #include "resource.h"
 
@@ -305,6 +307,8 @@ enum Key {
   BUTTON_DOWN,
 
   BUTTON_ENTER,
+  BUTTON_F11,
+
   BUTTON_COUNT
 };
 
@@ -316,7 +320,7 @@ std::unordered_map<i32, Key> kb = {
     {0x5A, input::BUTTON_UP},   {0x53, input::BUTTON_DOWN},
     {0x51, input::BUTTON_LEFT}, {0x44, input::BUTTON_RIGHT},
 
-    {0x0D, BUTTON_ENTER}};
+    {0x0D, BUTTON_ENTER},       {0x7A, BUTTON_F11}};
 
 inline bool is_changed(Key key) { return buttons[key].changed; }
 inline bool is_down(Key key) { return buttons[key].is_down; }
@@ -975,6 +979,9 @@ public:
                    (float)frequency.QuadPart;
         last_counter = current_counter;
 
+        if (input::is_pressed(input::BUTTON_F11))
+          toggle_fullscreen();
+
         if (menu_state == MENU_MAIN) {
           world.draw_simple(dt);
 
@@ -1301,6 +1308,32 @@ private:
     }
   }
 
+  void toggle_fullscreen() {
+    DWORD style = GetWindowLong(window, GWL_STYLE);
+
+    if (!is_fullscreen) {
+      MONITORINFO mi = {sizeof(mi)};
+      if (GetWindowPlacement(window, &prev_wnd_place) &&
+          GetMonitorInfo(MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY),
+                         &mi)) {
+
+        SetWindowLong(window, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
+        SetWindowPos(window, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+                     mi.rcMonitor.right - mi.rcMonitor.left,
+                     mi.rcMonitor.bottom - mi.rcMonitor.top,
+                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+      }
+      is_fullscreen = true;
+    } else {
+      SetWindowLong(window, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
+      SetWindowPlacement(window, &prev_wnd_place);
+      SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER |
+                       SWP_FRAMECHANGED);
+      is_fullscreen = false;
+    }
+  }
+
   i32 init() {
     window_class = {};
     window_class.style = CS_HREDRAW | CS_VREDRAW;
@@ -1340,6 +1373,7 @@ private:
   WNDCLASSA window_class = {};
   HWND window = {};
   HDC hdc = {};
+  WINDOWPLACEMENT prev_wnd_place = {sizeof(prev_wnd_place)};
 
   render::Renderer renderer = {};
   World world = {renderer};
@@ -1353,6 +1387,7 @@ private:
 
   bool running = true;
   bool class_registered = false;
+  bool is_fullscreen = false;
 
   bool in_celebration = false;
   float celebration_time = 0.0f;
