@@ -34,7 +34,7 @@ PingPong/
 ├── main.cpp      # Entry point and main loop
 │
 ├── resource.h    # Resource identifiers
-├── app.rc        # Win32 resource script (icon, menu, etc.)
+├── app.rc        # Win32 resource script (icon)
 ├── app.ico       # Application icon
 ├── app_res.o     # Compiled resource object (generated)
 │
@@ -51,12 +51,15 @@ PingPong/
 |--------------|--------------------|
 | Player 1 Up  | `W` / `Z` (AZERTY) |
 | Player 1 Down | `S`               |
+| Player 1 Left | `Q`               |
+| Player 1 Right | `D`               |
 | Player 2 Up  | Up Arrow           |
 | Player 2 Down | Down Arrow         |
+| Player 2 Right | Right Arrow         |
+| Player 2 Left | Left Arrow         |
 | Navigate Menus | Up / Down Arrows  |
 | Select / Confirm | Enter            |
-| Back / Pause | `P` or Enter (in-game returns to menu) |
-| Exit         | `Esc`              |
+| Back         | Enter             |
 
 ---
 
@@ -94,6 +97,7 @@ Settings are available in the menu and include:
 
 - **Ball Speed** — configurable multiplier for ball velocity  
 - **Paddle Speed** — tuning for paddle responsiveness  
+- **Paddle Friction/Damping** — configurable paddle friction rate
 - **AI Difficulty** — selectable levels (Easy / Normal / Hard)  
 
 Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
@@ -105,15 +109,21 @@ Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
 - [ ] Add sound effects and background music  
 - [ ] High score saving / local persistence  
 - [ ] More polished menu transitions & animations  
-- [ ] Local multiplayer / shared keyboard improvements  
-- [ ] Theme support (retro neon, dark/light)  
+- [ ] Local multiplayer / shared keyboard improvements
+- [ ] Theme support (retro neon, dark/light)
 
 ---
 
 ## 📸 Screenshots
 
-![Main Menu](assets/screenshots/menu.png)  
-![Gameplay](assets/screenshots/gameplay.gif)  
+### Main Menu:
+![Main Menu](screenshots/main-menu.png)
+
+### Settings:
+![Settings](screenshots/settings.png)
+
+### Gameplay:
+![Gameplay](screenshots/gameplay.gif)
 
 ---
 
@@ -121,7 +131,7 @@ Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
 
 **Zakaria Aliliche**  
 C++ developer focused on low-level graphics, performance, and clean architecture.  
-GitHub: [https://github.com/yourusername](https://github.com/Mono404Fun)
+GitHub: [https://github.com/Mono404Fun](https://github.com/Mono404Fun)
 
 ---
 
@@ -129,7 +139,7 @@ GitHub: [https://github.com/yourusername](https://github.com/Mono404Fun)
 
 This project is released under the **MIT License**.
 
-> MIT License © 2025 Zakaria Aliliche
+> MIT License © 2025 Zakaria Alilich
 
 ---
 
@@ -138,7 +148,7 @@ This project is released under the **MIT License**.
 Contributions, bug reports, and suggestions are welcome. Suggested workflow:
 
 1. Fork the repo  
-2. Create a feature branch (`feature/my-change`)  
+2. Create a feature branch (`feature/my-change`)
 3. Make changes & test locally  
 4. Open a pull request with a short description and screenshots (if applicable)
 
