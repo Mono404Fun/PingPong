@@ -112,8 +112,6 @@ Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
 
 ## 📸 Screenshots
 
-*(Add real screenshots to `assets/screenshots/` and update the paths below.)*
-
 ![Main Menu](assets/screenshots/menu.png)  
 ![Gameplay](assets/screenshots/gameplay.gif)  
 
@@ -123,7 +121,7 @@ Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
 
 **Zakaria Aliliche**  
 C++ developer focused on low-level graphics, performance, and clean architecture.  
-GitHub: [https://github.com/yourusername](https://github.com/yourusername) *(replace with your profile)*  
+GitHub: [https://github.com/yourusername](https://github.com/Mono404Fun)
 
 ---
 
