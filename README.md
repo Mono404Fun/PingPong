@@ -116,13 +116,13 @@ Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
 
 ## 📸 Screenshots
 
-### Main Menu:
+### 🎮 Main Menu:
 ![Main Menu](screenshots/main-menu.png)
 
-### Settings:
+### ⚙  Settings:
 ![Settings](screenshots/settings.png)
 
-### Gameplay:
+### 🕹 Gameplay:
 ![Gameplay](screenshots/gameplay.gif)
 
 ---
