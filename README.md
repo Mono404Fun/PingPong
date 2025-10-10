@@ -27,6 +27,7 @@ It demonstrates how to build a complete, interactive, and visually sleek desktop
 
 ## 🧱 Project Structure  
 
+```plaintext
 PingPong/
 │
 ├── game.h        # The entire game logic and UI system (single header)
@@ -40,6 +41,7 @@ PingPong/
 ├── build.bat     # Build script (for quick compilation)
 │
 └── README.md
+```
 
 ---
 
