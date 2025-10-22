@@ -1,4 +1,8 @@
-#include "game.hpp"
+#define MINIAUDIO_IMPLEMENTATION
+#define MA_ENABLE_MP3
+#include "third_party/miniaudio.h"
+
+#include "include/game.hpp"
 
 i32 WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, i32 nCmdShow) {

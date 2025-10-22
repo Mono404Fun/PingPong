@@ -1,16 +1,28 @@
+#define NOMINMAX
 #include <Windows.h>
+#include <mmsystem.h>
+
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <libloaderapi.h>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <iomanip>
+#include <limits>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
-#include <winuser.h>
 
-#include "resource.h"
+#include "../rsc/resource.h"
+#include "../third_party/json.hpp"
+
+#pragma comment(lib, "winmm.lib")
 
 using u8 = uint8_t;
 using u16 = uint16_t;
@@ -22,8 +34,16 @@ using i16 = int16_t;
 using i32 = int32_t;
 using i64 = int64_t;
 
+using json = nlohmann::json;
+using namespace std::string_literals;
+
 namespace game {
 namespace utils {
+template <typename T> constexpr T round_to(T value, int decimals = 1) {
+  T scale = std::pow(static_cast<T>(10), decimals);
+  return std::round(value * scale) / scale;
+}
+
 template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
 static inline T clamp(T min, T value, T max) {
   if (value < min)
@@ -103,13 +123,19 @@ struct Renderer {
       idx = (c - '0') + 0; // digits at 0..9
     } else if (c >= 'A' && c <= 'Z') {
       idx = 10 + (c - 'A'); // letters after digits
+    } else if (c == '%') {
+      idx = 37;
+    } else if (c == ':') {
+      idx = 38;
+    } else if (c == '-') {
+      idx = 39;
+    } else if (c == '!') {
+      idx = 40;
     } else {
-      // space or unknown -> index for space
-      idx = 10 + 26; // last index reserved for space
+      idx = 36;
     }
     const u8 *glyph = FONT_5x7[idx];
 
-    // draw 5x7 pixels; center at (cx,cy)
     const int W = 5;
     const int H = 7;
     float total_w = W * pixel_size;
@@ -120,7 +146,6 @@ struct Renderer {
     for (int ry = 0; ry < H; ++ry) {
       u8 row = glyph[ry];
       for (int rx = 0; rx < W; ++rx) {
-        // read bits from right to left instead of left to right
         bool on = (row >> (W - 1 - rx)) & 1;
         if (on) {
           float px = start_x + rx * pixel_size;
@@ -133,7 +158,6 @@ struct Renderer {
 
   void render_text(const std::string &s, float cx, float cy, float pixel_size,
                    float spacing, u32 color) {
-    // Render entire string centered at (cx,cy)
     if (s.empty())
       return;
     float glyph_w = 5.0f * pixel_size;
@@ -143,102 +167,6 @@ struct Renderer {
     for (size_t i = 0; i < s.size(); ++i) {
       float gx = start_x + static_cast<float>(i) * (glyph_w + spacing);
       render_glyph_5x7(s[i], gx, cy, pixel_size, color);
-    }
-  }
-
-  void render_digit(i32 digit, float cx, float cy, float size, u32 color) {
-    const float seg_th = size * 0.5f;
-    const float v_half_y = size * 2.5f;
-    const float h_half_x = size * 1.2f;
-
-    const float A_y = cy - v_half_y + seg_th;
-    const float G_y = cy;
-    const float D_y = cy + v_half_y - seg_th;
-
-    const float top_v_y = (A_y + G_y) * 0.5f;
-    const float bot_v_y = (G_y + D_y) * 0.5f;
-
-    const float left_x = cx - h_half_x;
-    const float right_x = cx + h_half_x;
-
-    const float vert_half_y = (v_half_y - seg_th) * 0.5f;
-    const float hor_half_x = h_half_x;
-    const float hor_half_y = seg_th;
-    const float vert_half_x = seg_th;
-
-    auto draw_segment = [&](const bool (&digit_map)[7]) {
-      i32 i = 0;
-
-      for (bool s : digit_map) {
-        if (s) {
-          if (i == 0)
-            render_rect(cx, A_y, hor_half_x, hor_half_y, color);
-          if (i == 1)
-            render_rect(right_x, top_v_y, vert_half_x, vert_half_y, color);
-          if (i == 2)
-            render_rect(right_x, bot_v_y, vert_half_x, vert_half_y, color);
-          if (i == 3)
-            render_rect(cx, D_y, hor_half_x, hor_half_y, color);
-          if (i == 4)
-            render_rect(left_x, bot_v_y, vert_half_x, vert_half_y, color);
-          if (i == 5)
-            render_rect(left_x, top_v_y, vert_half_x, vert_half_y, color);
-          if (i == 6)
-            render_rect(cx, G_y, hor_half_x, hor_half_y, color);
-        }
-        i++;
-      }
-    };
-
-    const bool SEG_MAP[10][7] = {
-        {1, 1, 1, 1, 1, 1, 0}, // 0
-        {0, 1, 1, 0, 0, 0, 0}, // 1
-        {1, 1, 0, 1, 1, 0, 1}, // 2
-        {1, 1, 1, 1, 0, 0, 1}, // 3
-        {0, 1, 1, 0, 0, 1, 1}, // 4
-        {1, 0, 1, 1, 0, 1, 1}, // 5
-        {1, 0, 1, 1, 1, 1, 1}, // 6
-        {1, 1, 1, 0, 0, 0, 0}, // 7
-        {1, 1, 1, 1, 1, 1, 1}, // 8
-        {1, 1, 1, 1, 0, 1, 1}  // 9
-    };
-
-    if (digit < 0 || digit > 9)
-      return;
-
-    draw_segment(SEG_MAP[digit]);
-  }
-
-  void render_number(i32 number, float x, float y, float size, u32 color) {
-    if (render_state.height == 0 || render_state.width == 0)
-      return;
-    if (!render_state.memory)
-      return;
-
-    bool negative = (number < 0);
-    if (negative)
-      number = -number;
-
-    std::string str = std::to_string(number);
-    size_t n = str.size();
-
-    const float seg_th = size * 0.5f;
-    const float h_half_x = size * 1.2f;
-    const float digit_width = (h_half_x * 2.0f) + (seg_th * 2.0f);
-    const float spacing = size * 0.6f;
-    const float step = digit_width + spacing;
-
-    const float start_x = x - ((static_cast<float>(n - 1) * step) / 2.0f);
-
-    for (size_t i = 0; i < n; ++i) {
-      int d = str[i] - '0';
-      float cx = start_x + static_cast<float>(i) * step;
-      render_digit(d, cx, y, size, color);
-    }
-
-    if (negative) {
-      float minus_cx = start_x - step;
-      render_rect(minus_cx, y, digit_width * 0.35f, seg_th, color);
     }
   }
 };
@@ -269,7 +197,7 @@ const u8 Renderer::FONT_5x7[][7] = {
     {0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C}, // J
     {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}, // K
     {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}, // L
-    {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}, // M (approx)
+    {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}, // M
     {0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11}, // N
     {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}, // O
     {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}, // P
@@ -284,9 +212,20 @@ const u8 Renderer::FONT_5x7[][7] = {
     {0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}, // Y
     {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}, // Z
 
-    // space (index 36)
-    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}};
+    // space
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 
+    // '%'
+    {0x19, 0x1A, 0x04, 0x08, 0x13, 0x03, 0x00},
+
+    // ':'
+    {0x00, 0x04, 0x00, 0x00, 0x04, 0x00, 0x00},
+
+    // '-'
+    {0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x00},
+
+    // '!'
+    {0x04, 0x04, 0x04, 0x04, 0x00, 0x04, 0x00}};
 } // namespace render
 
 namespace input {
@@ -308,6 +247,8 @@ enum Key {
 
   BUTTON_ENTER,
   BUTTON_F11,
+  BUTTON_PAUSE,
+  BUTTON_ESC,
 
   BUTTON_COUNT
 };
@@ -320,7 +261,8 @@ std::unordered_map<i32, Key> kb = {
     {0x5A, input::BUTTON_UP},   {0x53, input::BUTTON_DOWN},
     {0x51, input::BUTTON_LEFT}, {0x44, input::BUTTON_RIGHT},
 
-    {0x0D, BUTTON_ENTER},       {0x7A, BUTTON_F11}};
+    {0x0D, BUTTON_ENTER},       {0x7A, BUTTON_F11},
+    {0x50, BUTTON_PAUSE},       {0x1B, BUTTON_ESC}};
 
 inline bool is_changed(Key key) { return buttons[key].changed; }
 inline bool is_down(Key key) { return buttons[key].is_down; }
@@ -336,6 +278,155 @@ inline void process_button(MSG message) {
   }
 }
 } // namespace input
+
+namespace audio {
+
+bool enabled = false;
+bool initialized = false;
+
+float music_volume = 1.0f;
+float sfx_volume = 1.0f;
+
+ma_engine engine;
+ma_sound music;
+
+struct SoundPool {
+  std::vector<ma_sound *> sounds;
+  size_t next = 0;
+
+  float cooldown = 0.105f;
+  float timer = 0.0f;
+
+  void update(float dt) { timer += dt; }
+
+  void play() {
+    if (timer < cooldown)
+      return;
+
+    if (sounds.empty())
+      return;
+
+    ma_sound *s = sounds[next];
+    ma_sound_stop(s);
+    ma_sound_seek_to_pcm_frame(s, 0);
+    ma_sound_start(s);
+
+    next = (next + 1) % sounds.size();
+    timer = 0.0f;
+  }
+
+  void set_volume(float vol) {
+    for (auto *s : sounds)
+      ma_sound_set_volume(s, vol);
+  }
+};
+
+std::array<std::string, 10> sound_filenames = {
+    "navigation.mp3",  "paddle_hit.mp3",     "setting.mp3",        "button.mp3",
+    "button_back.mp3", "go_tick.mp3",        "countdown_tick.mp3", "shine.mp3",
+    "winner.mp3",      "game_timer_tick.mp3"};
+
+std::unordered_map<std::string, SoundPool> sfx_sounds;
+
+void load_sfx(const std::string &filename) {
+  SoundPool pool;
+  for (int i = 0; i < 3; ++i) {
+    ma_sound *s = new ma_sound;
+    if (ma_sound_init_from_file(&engine,
+                                std::format("assets/sfx/{}", filename).c_str(),
+                                0, nullptr, nullptr, s) == MA_SUCCESS) {
+      ma_sound_set_volume(s, sfx_volume);
+      pool.sounds.push_back(s);
+    } else {
+      delete s;
+    }
+  }
+
+  sfx_sounds[filename] = std::move(pool);
+}
+
+void update(float dt) {
+  if (!initialized)
+    return;
+
+  for (auto &[_, pool] : sfx_sounds)
+    pool.update(dt);
+}
+
+void update_music_volume() {
+  if (!initialized)
+    return;
+  ma_sound_set_volume(&music, music_volume);
+}
+
+void update_sfx_volume() {
+  if (!initialized)
+    return;
+
+  for (auto &[_, pool] : sfx_sounds)
+    pool.set_volume(sfx_volume);
+}
+
+void play_effect(const std::string &filename) {
+  if (!initialized)
+    return;
+
+  auto it = sfx_sounds.find(filename);
+  if (it != sfx_sounds.end())
+    it->second.play();
+}
+
+void set_enabled(bool state) {
+  enabled = state;
+  if (!initialized)
+    return;
+
+  if (enabled)
+    ma_sound_start(&music);
+  else
+    ma_sound_stop(&music);
+}
+
+void cleanup() {
+  if (!initialized)
+    return;
+
+  for (auto &[_, pool] : sfx_sounds) {
+    for (auto *s : pool.sounds) {
+      ma_sound_uninit(s);
+      delete s;
+    }
+    pool.sounds.clear();
+  }
+  sfx_sounds.clear();
+
+  ma_sound_uninit(&music);
+  ma_engine_uninit(&engine);
+
+  initialized = false;
+}
+
+void init() {
+  if (initialized)
+    return;
+
+  if (ma_engine_init(nullptr, &engine) != MA_SUCCESS)
+    return;
+
+  for (auto &fn : sound_filenames)
+    load_sfx(fn);
+
+  if (ma_sound_init_from_file(&engine, "assets/music/music.mp3", 0, nullptr,
+                              nullptr, &music) == MA_SUCCESS) {
+    update_music_volume();
+    ma_sound_set_looping(&music, MA_TRUE);
+    ma_sound_set_volume(&music, music_volume);
+    ma_sound_start(&music);
+  }
+
+  initialized = true;
+}
+} // namespace audio
 
 namespace objects {
 
@@ -362,7 +453,7 @@ struct PlayerController {
   float ddp_speed;
   float damping;
 
-  void init(float x, float &_damping) {
+  void init(float x, float _damping) {
     pos.x = x;
     pos.y = 0.0f;
     dp = 0.0f;
@@ -397,6 +488,7 @@ struct Player {
   bool arrow_controls;
   bool ai_mode = true;
 
+  float pulse_timer;
   float width;
   float height;
 
@@ -550,8 +642,8 @@ struct Player {
   }
 
   void init(float x, bool ai_mode_, float &speed, float &damping) {
-    controller.init(x, damping);
-    controller.ddp_speed = speed;
+    controller.init(x, damping * 9.0f);
+    controller.ddp_speed = speed * 1700.0f;
     ai_mode = ai_mode_;
     width = 2.0f;
     height = 12.0f;
@@ -575,6 +667,18 @@ struct Player {
     }
   }
 
+  u32 lighten_color(u32 c, float intensity) {
+    u8 r = (c >> 16) & 0xFF;
+    u8 g = (c >> 8) & 0xFF;
+    u8 b = c & 0xFF;
+
+    r = static_cast<u8>(r + (255 - r) * intensity);
+    g = static_cast<u8>(g + (255 - g) * intensity);
+    b = static_cast<u8>(b + (255 - b) * intensity);
+
+    return (r << 16) | (g << 8) | b;
+  }
+
   void update(float dt, Vector2 &ball_pos, Vector2 &ball_vel,
               AIDifficulty difficulty = Medium) {
     float ddp = 0.0f;
@@ -586,8 +690,20 @@ struct Player {
     controller.update(dt, ddp);
     add_collision();
 
+    if (pulse_timer > 0.0f) {
+      pulse_timer -= dt;
+      if (pulse_timer < 0.0f)
+        pulse_timer = 0.0f;
+    }
+
+    u32 base_color = color;
+    u32 pulse_color = 0xFFFF80;
+
+    float t = pulse_timer / 0.5f;
+    u32 final_color = (t > 0.0f) ? lighten_color(color, t) : color;
+
     renderer->render_rect(controller.pos.x, controller.pos.y, width, height,
-                          color);
+                          final_color);
   }
 };
 
@@ -620,7 +736,7 @@ struct BallController {
     winner = 0;
   }
 
-  void add_collision(const Player &player, Ball &ball);
+  void add_collision(Player *player, Ball &ball);
   void update_physics(float dt);
   void update(float dt, Ball &ball);
 };
@@ -645,9 +761,7 @@ struct ParticleBurst {
   float speed_max = 80.0f;
 
   ParticleBurst() = default;
-  ParticleBurst(render::Renderer &r) : renderer(&r) {
-    std::srand((unsigned)std::time(nullptr));
-  }
+  ParticleBurst(render::Renderer &r) : renderer(&r) {}
 
   void start(float x, float y) {
     if (!renderer)
@@ -751,7 +865,7 @@ struct Ball {
 
   void init(Player &player1, Player &player2, float &speed) {
     controller.init(&player1, &player2);
-    controller.vel.x = speed;
+    controller.vel.x = speed * 100.0f;
     color = 0x0000FFFF;
   }
 
@@ -776,14 +890,18 @@ struct Ball {
   void update(float dt) {
     controller.update(dt, *this);
     render();
-    renderer->render_number(controller.player1->score, -10.0f, 40.0f, 1.0f,
-                            0xbbffbb);
-    renderer->render_number(controller.player2->score, 10.0f, 40.0f, 1.0f,
-                            0xbbffbb);
+
+    renderer->render_text(std::to_string(controller.player1->score), -10.0f,
+                          40.0f, 0.7f, 0.7f, 0xbbffbb);
+    renderer->render_text(std::to_string(controller.player2->score), 10.0f,
+                          40.0f, 0.7f, 0.7f, 0xbbffbb);
   }
 };
 
-inline void BallController::add_collision(const Player &player, Ball &ball) {
+inline void BallController::add_collision(Player *player, Ball &ball) {
+  if (!player)
+    return;
+
   if (pos.y + size > 50.0f) {
     pos.y = 50.0f - size;
     vel.y = -vel.y;
@@ -798,6 +916,7 @@ inline void BallController::add_collision(const Player &player, Ball &ball) {
     scored = true;
     winner = 1;
     pos.x = 80.0f + size;
+    audio::play_effect("shine.mp3");
     player1->increment_score();
     return;
   }
@@ -806,24 +925,28 @@ inline void BallController::add_collision(const Player &player, Ball &ball) {
     scored = true;
     winner = 2;
     pos.x = -80.0f - size;
+    audio::play_effect("shine.mp3");
     player2->increment_score();
     return;
   }
 
-  float px = player.controller.pos.x;
-  float py = player.controller.pos.y;
-  float width = player.width;
-  float height = player.height;
-  float dp = player.controller.dp;
+  float px = player->controller.pos.x;
+  float py = player->controller.pos.y;
+  float width = player->width;
+  float height = player->height;
+  float dp = player->controller.dp;
 
   bool overlap_x = (fabsf(pos.x - px) <= (width + size));
   bool overlap_y = (fabsf(pos.y - py) <= (height + size));
 
   if (overlap_x && overlap_y) {
-    if (vel.x < 0.0f)
+    if (vel.x < 0.0f) {
       pos.x = px + width + size;
-    else
+    } else {
       pos.x = px - width - size;
+    }
+
+    player->pulse_timer = 0.5f;
 
     vel.x = -vel.x + 0.0001f;
 
@@ -831,7 +954,8 @@ inline void BallController::add_collision(const Player &player, Ball &ball) {
     float hit_influence = hit * 38.0f;
     float paddle_influence = dp * 0.20f;
 
-    vel.y += hit_influence + paddle_influence;
+    vel.y += hit_influence + paddle_influence + 0.0001f;
+    audio::play_effect("paddle_hit.mp3");
   }
 }
 
@@ -847,11 +971,11 @@ inline void BallController::update(float dt, Ball &ball) {
   update_physics(dt);
 
   if (player1)
-    add_collision(*player1, ball);
+    add_collision(player1, ball);
   if (scored)
     return;
   if (player2)
-    add_collision(*player2, ball);
+    add_collision(player2, ball);
 }
 } // namespace objects
 
@@ -910,14 +1034,186 @@ struct World {
   }
 };
 
+struct Config {
+  std::string filename;
+  json data;
+
+  float paddle_speed = 1.0f;
+  float paddle_damping = 1.0f;
+  float ball_speed = 1.4f;
+  float game_duration_secs = 30.0f;
+  objects::AIDifficulty ai_difficulty = static_cast<objects::AIDifficulty>(1);
+
+  Config(const std::string &filename_) : filename(filename_) {
+    data = json::object();
+    data["settings"] = {{"paddle_speed", paddle_speed},
+                        {"paddle_friction", paddle_damping},
+                        {"ball_speed", ball_speed},
+                        {"ai_difficulty", static_cast<int>(ai_difficulty)},
+                        {"music_enabled", audio::enabled},
+                        {"music_volume", audio::music_volume},
+                        {"sfx_volume", audio::sfx_volume},
+                        {"game_duration_secs", game_duration_secs}};
+  }
+
+  void init() {
+    using namespace std::filesystem;
+    if (exists(filename)) {
+      try {
+        load_from_file(filename);
+      } catch (...) {
+        sync_json_from_members();
+        save_to_file(filename);
+      }
+    } else {
+      path p = path(filename).parent_path();
+      if (!p.empty() && !exists(p))
+        create_directories(p);
+
+      if (exists("config/default.json")) {
+        try {
+          load_from_file("config/default.json");
+        } catch (...) {
+          sync_json_from_members();
+        }
+      }
+      save_to_file(filename);
+    }
+  }
+
+  void save_to_file(const std::string &filename_) {
+    paddle_speed = utils::round_to(paddle_speed, 1);
+    paddle_damping = utils::round_to(paddle_damping, 1);
+    ball_speed = utils::round_to(ball_speed, 1);
+    audio::music_volume = utils::round_to(audio::music_volume, 1);
+    audio::sfx_volume = utils::round_to(audio::sfx_volume, 1);
+
+    data["settings"]["paddle_speed"] = paddle_speed;
+    data["settings"]["paddle_friction"] = paddle_damping;
+    data["settings"]["ball_speed"] = ball_speed;
+    data["settings"]["ai_difficulty"] = static_cast<int>(ai_difficulty);
+    data["settings"]["music_enabled"] = audio::enabled;
+    data["settings"]["music_volume"] = audio::music_volume;
+    data["settings"]["sfx_volume"] = audio::sfx_volume;
+    data["settings"]["game_duration_secs"] = game_duration_secs;
+
+    std::ofstream file(filename_, std::ios::trunc);
+    if (!file) {
+      return;
+    }
+    file << data.dump(4);
+  }
+
+  void set_paddle_speed(float value) {
+    paddle_speed = utils::round_to(value, 1);
+    data["settings"]["paddle_speed"] = paddle_speed;
+  }
+
+  void set_paddle_damping(float value) {
+    paddle_damping = utils::round_to(value, 1);
+    data["settings"]["paddle_friction"] = paddle_damping;
+  }
+
+  void set_ball_speed(float value) {
+    ball_speed = utils::round_to(value, 1);
+    data["settings"]["ball_speed"] = ball_speed;
+  }
+
+  void set_ai_difficulty(objects::AIDifficulty value) {
+    ai_difficulty = value;
+    data["settings"]["ai_difficulty"] = static_cast<int>(ai_difficulty);
+  }
+
+  void set_music_enabled(bool enabled) {
+    audio::set_enabled(enabled);
+    data["settings"]["music_enabled"] = enabled;
+  }
+
+  void set_music_volume(float value) {
+    audio::music_volume = utils::round_to(value, 1);
+    data["settings"]["music_volume"] = audio::music_volume;
+  }
+
+  void set_sfx_volume(float value) {
+    audio::sfx_volume = utils::round_to(value, 1);
+    data["settings"]["sfx_volume"] = audio::sfx_volume;
+  }
+
+  void set_game_duration_secs(u16 value) {
+    game_duration_secs = value;
+    data["settings"]["game_duration_secs"] = value;
+  }
+
+  void load_from_file(const std::string &filename_) {
+    std::ifstream file(filename_);
+    if (!file)
+      throw std::runtime_error("Could not open config file");
+
+    json loaded;
+    file >> loaded;
+
+    if (!loaded.is_object() || !loaded.contains("settings")) {
+      throw std::runtime_error("Invalid config json");
+    }
+
+    data = std::move(loaded);
+    auto settings = data["settings"];
+
+    if (settings.contains("paddle_speed"))
+      paddle_speed = settings["paddle_speed"].get<float>();
+    if (settings.contains("paddle_friction"))
+      paddle_damping = settings["paddle_friction"].get<float>();
+    if (settings.contains("ball_speed"))
+      ball_speed = settings["ball_speed"].get<float>();
+    if (settings.contains("ai_difficulty"))
+      ai_difficulty = static_cast<objects::AIDifficulty>(
+          settings["ai_difficulty"].get<int>());
+    if (settings.contains("music_enabled"))
+      audio::set_enabled(settings["music_enabled"].get<bool>());
+    if (settings.contains("music_volume"))
+      audio::music_volume = settings["music_volume"].get<float>();
+    if (settings.contains("sfx_volume"))
+      audio::sfx_volume = settings["sfx_volume"].get<float>();
+    if (settings.contains("game_duration_secs"))
+      game_duration_secs = settings["game_duration_secs"].get<u16>();
+
+    paddle_speed = utils::round_to(paddle_speed, 1);
+    paddle_damping = utils::round_to(paddle_damping, 1);
+    ball_speed = utils::round_to(ball_speed, 1);
+    audio::music_volume = utils::round_to(audio::music_volume, 1);
+    audio::sfx_volume = utils::round_to(audio::sfx_volume, 1);
+
+    sync_json_from_members();
+  }
+
+private:
+  void sync_json_from_members() {
+    data["settings"]["paddle_speed"] = paddle_speed;
+    data["settings"]["paddle_friction"] = paddle_damping;
+    data["settings"]["ball_speed"] = ball_speed;
+    data["settings"]["ai_difficulty"] = static_cast<int>(ai_difficulty);
+    data["settings"]["music_enabled"] = audio::enabled;
+    data["settings"]["music_volume"] = audio::music_volume;
+    data["settings"]["sfx_volume"] = audio::sfx_volume;
+    data["settings"]["game_duration_secs"] = game_duration_secs;
+  }
+};
+
 namespace window {
 class Window {
+  enum MenuState {
+    MENU_MAIN = 0,
+    MENU_SETTINGS = 1,
+    MENU_PLAYING = 2,
+    MENU_BACK = 3
+  };
+
 public:
   Window()
       : dimensions{0, 0, 1080, 720}, title("Ping Pong Game"), icon_path(""),
         renderer(), world(renderer), player1(renderer, false),
         player2(renderer, true), ball(renderer), particle_burst(renderer),
-        flash(renderer) {
+        flash() {
     std::srand((unsigned)std::time(nullptr));
   }
 
@@ -933,23 +1229,7 @@ public:
     if (!init())
       return 0;
 
-    float ball_speed = 95.0f;
-    float paddle_speed = 1600.0f;
-    float paddle_damping = 11.0f;
-
-    i32 ai_difficulty;
-
-    enum MenuState { MENU_MAIN = 0, MENU_SETTINGS = 1, MENU_PLAYING = 2 };
-    MenuState menu_state = MENU_MAIN;
-
-    std::vector<std::string> menu_items = {"PLAY VS AI", "PLAY VS FRIEND",
-                                           "SETTINGS", "EXIT"};
-    int menu_index = 0;
-
     timeBeginPeriod(1);
-
-    QueryPerformanceFrequency(&frequency);
-    QueryPerformanceCounter(&last_counter);
 
     while (running) {
       MSG message;
@@ -979,6 +1259,8 @@ public:
                    (float)frequency.QuadPart;
         last_counter = current_counter;
 
+        audio::update(dt);
+
         if (input::is_pressed(input::BUTTON_F11))
           toggle_fullscreen();
 
@@ -1004,94 +1286,127 @@ public:
 
           if (input::is_pressed(input::BUTTON_UP_ARROW) ||
               input::is_pressed(input::BUTTON_UP)) {
+            audio::play_effect("navigation.mp3");
             menu_index--;
             if (menu_index < 0)
               menu_index = static_cast<int>(menu_items.size()) - 1;
           }
           if (input::is_pressed(input::BUTTON_DOWN_ARROW) ||
               input::is_pressed(input::BUTTON_DOWN)) {
+            audio::play_effect("navigation.mp3");
             menu_index++;
             if (menu_index >= static_cast<int>(menu_items.size()))
               menu_index = 0;
           }
           if (input::is_pressed(input::BUTTON_ENTER)) {
             if (menu_index == 0) {
-              player1.init(-70.0f, false, paddle_speed, paddle_damping);
-              player2.init(70.0f, true, paddle_speed, paddle_damping);
+              player1.init(-70.0f, false, game_config.paddle_speed,
+                           game_config.paddle_damping);
+              player2.init(70.0f, true, game_config.paddle_speed,
+                           game_config.paddle_damping);
               player1.ai_mode = false;
               player2.ai_mode = true;
               player1.score = 0;
               player2.score = 0;
-              ball.init(player1, player2, ball_speed);
+
+              ball.init(player1, player2, game_config.ball_speed);
+              countdown_value = 3;
+              countdown_time = 0.0f;
+              in_countdown = true;
               menu_state = MENU_PLAYING;
             } else if (menu_index == 1) {
-              player1.init(-70.0f, false, paddle_speed, paddle_damping);
-              player2.init(70.0f, false, paddle_speed, paddle_damping);
+              player1.init(-70.0f, false, game_config.paddle_speed,
+                           game_config.paddle_damping);
+              player2.init(70.0f, false, game_config.paddle_speed,
+                           game_config.paddle_damping);
               player1.ai_mode = false;
               player2.ai_mode = false;
               player1.score = 0;
               player2.score = 0;
-              ball.init(player1, player2, ball_speed);
+              ball.init(player1, player2, game_config.ball_speed);
+              countdown_value = 3;
+              countdown_time = 0.0f;
+              in_countdown = true;
               menu_state = MENU_PLAYING;
             } else if (menu_index == 2) {
               menu_state = MENU_SETTINGS;
             } else if (menu_index == 3) {
               running = false;
             }
+
+            audio::play_effect("button.mp3");
           }
         } else if (menu_state == MENU_SETTINGS) {
           static i32 settings_index = 0;
-          static float _ball_speed = 1.0f;
-          static float _paddle_speed = 1.0f;
-          static float _paddle_damping = 1.4f;
-          static i32 _ai_difficulty = 1; // 0=Easy, 1=Normal, 2=Hard
+          static float _ball_speed = game_config.ball_speed;
+          static float _paddle_speed = game_config.paddle_speed;
+          static float _paddle_damping = game_config.paddle_damping;
+          static u16 _game_duration_secs = game_config.game_duration_secs;
+          static i32 _ai_difficulty =
+              static_cast<i32>(game_config.ai_difficulty);
 
           std::vector<std::string> setting_labels = {
-              "BALL SPEED", "PADDLE SPEED", "PADDLE FRICTION", "AI DIFFICULTY",
-              "BACK"};
+              "BALL SPEED",    "PADDLE SPEED",  "PADDLE FRICTION",
+              "AI DIFFICULTY", "ENABLE MUSIC",  "MUSIC VOLUME",
+              "SFX VOLUME",    "GAME DURATION", "BACK"};
 
           world.draw_simple(dt);
-
-          float title_y = -25.0f;
-          renderer.render_text("SETTINGS", 0.0f, title_y, 1.2f, 0.7f,
+          renderer.render_text("SETTINGS", 0.0f, -42.0f, 1.2f, 0.7f,
                                0x00FFFFFF);
 
-          const float start_y = -5.0f;
+          const float start_y = -30.0f;
           const float gap = 9.0f;
+
           for (size_t i = 0; i < setting_labels.size(); ++i) {
             float y = start_y + static_cast<float>(i) * gap;
             u32 color = (i == (size_t)settings_index) ? 0x00FFCC66 : 0x00666666;
             renderer.render_rect(0.0f, y, 52.0f, 4.0f, 0x00102030);
 
+            float game_duration = 30.0f;
             std::string label = setting_labels[i];
             std::string value;
 
             if (label == "BALL SPEED") {
-              value = std::to_string(_ball_speed).substr(0, 3);
+              value = std::format("{:.1f}", _ball_speed);
             } else if (label == "PADDLE SPEED") {
-              value = std::to_string(_paddle_speed).substr(0, 3);
+              value = std::format("{:.1f}", _paddle_speed);
             } else if (label == "AI DIFFICULTY") {
-              if (_ai_difficulty == 0)
+              switch (_ai_difficulty) {
+              case 0:
                 value = "EASY";
-              else if (_ai_difficulty == 1)
+                break;
+              case 1:
                 value = "NORMAL";
-              else if (_ai_difficulty == 2)
+                break;
+              case 2:
                 value = "HARD";
-              else if (_ai_difficulty == 3)
+                break;
+              case 3:
                 value = "VERYHARD";
-              else if (_ai_difficulty == 4)
+                break;
+              default:
                 value = "UNBEATABLE";
+                break;
+              }
             } else if (label == "PADDLE FRICTION") {
-              value = std::to_string(_paddle_damping).substr(0, 3);
+              value = std::format("{:.1f}", _paddle_damping);
+            } else if (label == "ENABLE MUSIC") {
+              value = audio::enabled ? "ON" : "OFF";
+            } else if (label == "MUSIC VOLUME") {
+              value = std::format("{}%", static_cast<int>(std::round(
+                                             audio::music_volume * 100.0f)));
+            } else if (label == "SFX VOLUME") {
+              value = std::format("{}%", static_cast<int>(std::round(
+                                             audio::sfx_volume * 100.0f)));
+            } else if (label == "GAME DURATION") {
+              value = std::format("{}S", _game_duration_secs);
             } else {
               value = "";
             }
 
             renderer.render_text(label, -14.0f, y, 0.6f, 0.6f, color);
-
             if (!value.empty())
               renderer.render_text(value, 32.0f, y, 0.6f, 0.6f, 0x00AAAAAA);
-
             if (i == (size_t)settings_index) {
               renderer.render_rect(-44.0f, y, 1.2f, 1.2f, 0x00FFFFFF);
             }
@@ -1099,6 +1414,7 @@ public:
 
           if (input::is_pressed(input::BUTTON_UP_ARROW) ||
               input::is_pressed(input::BUTTON_UP)) {
+            audio::play_effect("navigation.mp3");
             settings_index--;
             if (settings_index < 0)
               settings_index = static_cast<int>(setting_labels.size()) - 1;
@@ -1106,63 +1422,138 @@ public:
 
           if (input::is_pressed(input::BUTTON_DOWN_ARROW) ||
               input::is_pressed(input::BUTTON_DOWN)) {
+            audio::play_effect("navigation.mp3");
             settings_index++;
             if (settings_index >= static_cast<int>(setting_labels.size()))
               settings_index = 0;
           }
 
           if (input::is_pressed(input::BUTTON_LEFT_ARROW)) {
-            if (settings_index == 0)
-              _ball_speed = std::max(0.5f, _ball_speed - 0.1f);
-            else if (settings_index == 1)
-              _paddle_speed = std::max(0.5f, _paddle_speed - 0.1f);
-            else if (settings_index == 2)
-              _paddle_damping = std::max(0.8f, _paddle_damping - 0.1f);
-            else if (settings_index == 3)
+            audio::play_effect("setting.mp3");
+            if (settings_index == 0) {
+              _ball_speed =
+                  std::max(0.5f, utils::round_to(_ball_speed - 0.1f, 1));
+            } else if (settings_index == 1) {
+              _paddle_speed =
+                  std::max(0.5f, utils::round_to(_paddle_speed - 0.1f, 1));
+            } else if (settings_index == 2) {
+              _paddle_damping =
+                  std::max(0.8f, utils::round_to(_paddle_damping - 0.1f, 1));
+            } else if (settings_index == 3) {
               _ai_difficulty = std::max(0, _ai_difficulty - 1);
+            } else if (settings_index == 4) {
+              game_config.set_music_enabled(false);
+            } else if (settings_index == 5) {
+              float newVol = std::max(
+                  0.0f, utils::round_to(audio::music_volume - 0.1f, 1));
+              game_config.set_music_volume(newVol);
+              audio::update_music_volume();
+            } else if (settings_index == 6) {
+              float newVol =
+                  std::max(0.0f, utils::round_to(audio::sfx_volume - 0.1f, 1));
+              game_config.set_sfx_volume(newVol);
+              audio::update_sfx_volume();
+            } else if (settings_index == 7) {
+              _game_duration_secs = std::max(5, _game_duration_secs - 1);
+            }
           }
 
           if (input::is_pressed(input::BUTTON_RIGHT_ARROW)) {
-            if (settings_index == 0)
-              _ball_speed = std::min(3.0f, _ball_speed + 0.1f);
-            else if (settings_index == 1)
-              _paddle_speed = std::min(3.0f, _paddle_speed + 0.1f);
-            else if (settings_index == 2)
-              _paddle_damping = std::min(2.0f, _paddle_damping + 0.1f);
-            else if (settings_index == 3)
+            audio::play_effect("setting.mp3");
+            if (settings_index == 0) {
+              _ball_speed =
+                  std::min(3.0f, utils::round_to(_ball_speed + 0.1f, 1));
+            } else if (settings_index == 1) {
+              _paddle_speed =
+                  std::min(3.0f, utils::round_to(_paddle_speed + 0.1f, 1));
+            } else if (settings_index == 2) {
+              _paddle_damping =
+                  std::min(2.0f, utils::round_to(_paddle_damping + 0.1f, 1));
+            } else if (settings_index == 3) {
               _ai_difficulty = std::min(4, _ai_difficulty + 1);
+            } else if (settings_index == 4) {
+              game_config.set_music_enabled(true);
+            } else if (settings_index == 5) {
+              float newVol = std::min(
+                  1.0f, utils::round_to(audio::music_volume + 0.1f, 1));
+              game_config.set_music_volume(newVol);
+              audio::update_music_volume();
+            } else if (settings_index == 6) {
+              float newVol =
+                  std::min(1.0f, utils::round_to(audio::sfx_volume + 0.1f, 1));
+              game_config.set_sfx_volume(newVol);
+              audio::update_sfx_volume();
+            } else if (settings_index == 7) {
+              _game_duration_secs = std::min(600, _game_duration_secs + 1);
+            }
           }
 
           if (input::is_pressed(input::BUTTON_ENTER)) {
-            if (settings_index == (int)setting_labels.size() - 1) {
+            if (settings_index == static_cast<int>(setting_labels.size() - 1)) {
+              audio::play_effect("button_back.mp3");
+
+              game_config.set_ball_speed(_ball_speed);
+              game_config.set_paddle_speed(_paddle_speed);
+              game_config.set_paddle_damping(_paddle_damping);
+              game_config.set_ai_difficulty(
+                  static_cast<objects::AIDifficulty>(_ai_difficulty));
+              game_config.set_game_duration_secs(_game_duration_secs);
+
+              game_config.save_to_file("config/config.json");
+
               menu_state = MENU_MAIN;
+            }
+          } else {
+            game_config.paddle_speed = _paddle_speed;
+            game_config.paddle_damping = _paddle_damping;
+            game_config.ball_speed = _ball_speed;
+            game_config.ai_difficulty =
+                static_cast<objects::AIDifficulty>(_ai_difficulty);
+            game_config.game_duration_secs = _game_duration_secs;
+          }
+        } else if (menu_state == MENU_PLAYING) {
+          static i8 paused_index = 0;
+          std::vector<std::string> paused_items = {"RESUME", "RESTART",
+                                                   "MAIN MENU"};
+
+          if (in_countdown) {
+            world.draw_simple(dt);
+            countdown_time += dt;
+
+            if (countdown_time >= 0.35f) {
+              countdown_time = 0.0f;
+              countdown_value--;
+
+              if (countdown_value > 0)
+                audio::play_effect("countdown_tick.mp3");
+              else if (countdown_value == 0)
+                audio::play_effect("go_tick.mp3");
+            }
+
+            std::string text;
+            float color;
+            if (countdown_value > 0) {
+              text = std::to_string(countdown_value);
+              color = 0x00FFFFFF;
+            } else {
+              text = "GO!";
+              color = 0x00FFCC66;
+            }
+
+            renderer.render_text(text, 0.0f, 0.0f, 2.0f, 1.0f, color);
+
+            if (countdown_value < 0) {
+              in_countdown = false;
+              game_running = true;
+              paused = false;
+
+              game_timer_active = true;
+              game_time_elapsed = 0.0f;
+              time_up_state = false;
             }
           }
 
-          ball_speed = _ball_speed * 95.0f;
-          paddle_speed = _paddle_speed * 1600.0f;
-          paddle_damping = _paddle_damping * 8.0f;
-          ai_difficulty = _ai_difficulty;
-        } else if (menu_state == MENU_PLAYING) {
-          if (!in_celebration) {
-            world.draw(dt);
-
-            player1.update(dt, ball.controller.pos, ball.controller.vel,
-                           (objects::AIDifficulty)ai_difficulty);
-            player2.update(dt, ball.controller.pos, ball.controller.vel,
-                           (objects::AIDifficulty)ai_difficulty);
-            ball.update(dt);
-
-            if (ball.controller.scored) {
-              in_celebration = true;
-              celebration_time = 0.0f;
-
-              float px = ball.controller.pos.x;
-              float py = ball.controller.pos.y;
-              particle_burst.start(px, py);
-              flash.start();
-            }
-          } else {
+          else if (in_celebration) {
             celebration_time += dt;
             flash.update(dt);
             particle_burst.update(dt);
@@ -1173,22 +1564,171 @@ public:
               player2.reset();
               in_celebration = false;
             }
-          }
 
-          if (in_celebration) {
             world.draw(0.0f);
             player1.update(dt, ball.controller.pos, ball.controller.vel);
             player2.update(dt, ball.controller.pos, ball.controller.vel);
             ball.render();
           }
 
-          if (input::is_pressed(input::BUTTON_ENTER)) {
-            menu_state = MENU_MAIN;
+          else if (!in_celebration) {
+            if (confirm_modal) {
+              world.draw_simple(dt);
+              renderer.render_text("PAUSED", 0.0f, -17.0f, 1.2f, 0.7f,
+                                   0x00FFFFFF);
+
+              for (size_t i = 0; i < paused_items.size(); ++i) {
+                float y = static_cast<float>(i) * 9.0f;
+                u32 color =
+                    (i == (size_t)paused_index) ? 0x00FFCC66 : 0x00666666;
+                renderer.render_rect(0.0f, y, 33.0f, 4.0f, 0x00102030);
+                renderer.render_text(paused_items[i], 0.0f, y, 0.6f, 0.6f,
+                                     color);
+                if (i == (size_t)paused_index)
+                  renderer.render_rect(-29.0f, y, 1.2f, 1.2f, 0x00FFFFFF);
+              }
+
+              if (input::is_pressed(input::BUTTON_UP_ARROW) ||
+                  input::is_pressed(input::BUTTON_UP)) {
+                audio::play_effect("navigation.mp3");
+                paused_index = (paused_index - 1 + paused_items.size()) %
+                               paused_items.size();
+              }
+
+              if (input::is_pressed(input::BUTTON_DOWN_ARROW) ||
+                  input::is_pressed(input::BUTTON_DOWN)) {
+                audio::play_effect("navigation.mp3");
+                paused_index = (paused_index + 1) % paused_items.size();
+              }
+            } else {
+              if (!time_up_state) {
+                world.draw(dt);
+                player1.update(dt, ball.controller.pos, ball.controller.vel,
+                               game_config.ai_difficulty);
+                player2.update(dt, ball.controller.pos, ball.controller.vel,
+                               game_config.ai_difficulty);
+                ball.update(dt);
+              } else {
+                world.draw_simple(dt);
+              }
+
+              if (game_timer_active && !paused && !confirm_modal &&
+                  !in_countdown && !time_up_state) {
+                game_time_elapsed += dt;
+
+                float time_left = std::max(
+                    0.0f, game_config.game_duration_secs - game_time_elapsed);
+                int minutes = static_cast<int>(time_left) / 60;
+                int seconds = static_cast<int>(time_left) % 60;
+
+                char timer_text[16];
+                sprintf(timer_text, "%02d:%02d", minutes, seconds);
+
+                if (minutes == 0 && seconds <= 5) {
+                  renderer.render_text(timer_text, 0.0f, -40.0f, 0.8f, 0.8f,
+                                       0xFF0000);
+
+                  tick_timer += dt;
+
+                  if (tick_timer >= 1.0f) {
+                    tick_timer = 0.0f;
+                    audio::play_effect("game_timer_tick.mp3");
+                  }
+                } else {
+                  renderer.render_text(timer_text, 0.0f, -40.0f, 0.8f, 0.8f,
+                                       0x00FFFFFF);
+                }
+
+                if (game_time_elapsed >= game_config.game_duration_secs) {
+                  game_timer_active = false;
+                  time_up_state = true;
+                  time_up_delay = 0.0f;
+                  audio::play_effect("winner.mp3");
+                }
+              }
+
+              if (time_up_state) {
+                std::string winner;
+                float color;
+                if (player1.score > player2.score) {
+                  winner = "PLAYER 1 WINS!";
+                  color = player1.color;
+                } else if (player2.score > player1.score) {
+                  winner = "PLAYER 2 WINS!";
+                  color = player2.color;
+                } else {
+                  winner = "DRAW!";
+                  color = 0x00FFCC66;
+                }
+
+                renderer.render_text("TIME IS UP!", 0.0f, -10.0f, 0.8f, 0.7f,
+                                     0x00FFFFFF);
+                renderer.render_text(winner, 0.0f, 0.0f, 1.2f, 0.8f, color);
+
+                time_up_delay += dt;
+                if (time_up_delay >= 2.5f) {
+                  menu_state = MENU_MAIN;
+                  time_up_state = false;
+                  continue;
+                }
+              }
+
+              if (!time_up_state && ball.controller.scored) {
+                in_celebration = true;
+                celebration_time = 0.0f;
+                float px = ball.controller.pos.x;
+                float py = ball.controller.pos.y;
+                particle_burst.start(px, py);
+                flash.start();
+              }
+            }
           }
 
-          particle_burst.render();
-          flash.render();
+          if (input::is_pressed(input::BUTTON_ESC))
+            confirm_modal = !confirm_modal;
+
+          if (confirm_modal) {
+            if (input::is_pressed(input::BUTTON_ENTER) ||
+                input::is_pressed(input::BUTTON_PAUSE)) {
+              audio::play_effect("button.mp3");
+              if (paused_index == 0) {
+                confirm_modal = false;
+              } else if (paused_index == 1) {
+                audio::play_effect("button_back.mp3");
+                player1.reset();
+                player2.reset();
+                ball.reset();
+                player1.score = 0;
+                player2.score = 0;
+                particle_burst.active = false;
+                flash.active = false;
+                in_celebration = false;
+                countdown_value = 3;
+                countdown_time = 0.0f;
+                in_countdown = true;
+                game_time_elapsed = 0.0f;
+                game_timer_active = true;
+                game_running = false;
+                paused = false;
+                confirm_modal = false;
+                menu_state = MENU_PLAYING;
+              } else if (paused_index == 2) {
+                ball.reset();
+                player1.reset();
+                player2.reset();
+                particle_burst.active = false;
+                flash.active = false;
+                game_running = false;
+                paused = false;
+                in_countdown = false;
+                confirm_modal = false;
+                menu_state = MENU_MAIN;
+              }
+            }
+          }
         }
+        particle_burst.render();
+        flash.render();
       }
 
       StretchDIBits(
@@ -1196,10 +1736,11 @@ public:
           0, 0, renderer.render_state.width, renderer.render_state.height,
           renderer.render_state.memory, &renderer.render_state.bitmap_info,
           DIB_RGB_COLORS, SRCCOPY);
-      Sleep(1);
+      // Sleep(1);
     }
 
     timeEndPeriod(1);
+    audio::cleanup();
     destroy();
 
     return 1;
@@ -1363,12 +1904,22 @@ private:
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&last_counter);
 
+    toggle_fullscreen();
+
+    audio::init();
+    game_config.init();
+
+    audio::update_music_volume();
+    audio::update_sfx_volume();
+
     return 1;
   }
 
   objects::Dimensions dimensions = {};
   std::string title = "Ping Pong Game";
   std::string icon_path = "";
+
+  Config game_config = {"config/config.json"};
 
   WNDCLASSA window_class = {};
   HWND window = {};
@@ -1377,6 +1928,8 @@ private:
 
   render::Renderer renderer = {};
   World world = {renderer};
+
+  MenuState menu_state = MENU_MAIN;
 
   objects::Player player1 = {renderer, false};
   objects::Player player2 = {renderer, true};
@@ -1388,6 +1941,25 @@ private:
   bool running = true;
   bool class_registered = false;
   bool is_fullscreen = false;
+
+  std::vector<std::string> menu_items = {"PLAY VS AI", "PLAY VS FRIEND",
+                                         "SETTINGS", "EXIT"};
+  int menu_index = 0;
+  float countdown_timer = 3.0f;
+
+  bool game_running = false;
+  bool paused = false;
+  bool confirm_modal = false;
+
+  bool in_countdown = false;
+  float countdown_time = 0.0f;
+  int countdown_value = 3;
+
+  float game_time_elapsed = 0.0f;
+  bool game_timer_active = false;
+  bool time_up_state = false;
+  float time_up_delay = 0.0f;
+  float tick_timer = 0.0f;
 
   bool in_celebration = false;
   float celebration_time = 0.0f;

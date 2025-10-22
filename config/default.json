@@ -1,0 +1,11 @@
+{
+	"settings": {
+		"paddle_speed": 2.0,
+		"paddle_friction": 1.5,
+		"ball_speed": 2.0,
+		"ai_difficulty": 1,
+		"music_enabled": true,
+		"music_volume": 1.0,
+		"sfx_volume": 1.0
+	}
+}
