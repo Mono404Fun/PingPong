@@ -28,19 +28,55 @@ It demonstrates how to build a complete, interactive, and visually sleek desktop
 ## 🧱 Project Structure  
 
 ```plaintext
-PingPong/
+│   after-installation-info.txt
+│   before-installation-info.txt
+│   build.bat
+│   license.txt
+│   main.cpp
+│   app.exe
+│   README.md
+│   website.html
 │
-├── game.h        # The entire game logic and UI system (single header)
-├── main.cpp      # Entry point and main loop
+├───assets
+│   ├───icon
+│   │       app.ico
+│   │
+│   ├───music
+│   │       music.mp3
+│   │
+│   └───sfx
+│           button.mp3
+│           button_back.mp3
+│           countdown_tick.mp3
+│           game_timer_tick.mp3
+│           go_tick.mp3
+│           navigation.mp3
+│           paddle_hit.mp3
+│           setting.mp3
+│           shine.mp3
+│           winner.mp3
 │
-├── resource.h    # Resource identifiers
-├── app.rc        # Win32 resource script (icon)
-├── app.ico       # Application icon
-├── app_res.o     # Compiled resource object (generated)
+├───config
+│       config.json
+│       default.json
 │
-├── build.bat     # Build script (for quick compilation)
+├───include
+│       game.hpp
 │
-└── README.md
+├───rsc
+│       app.rc
+│       app_res.o
+│       resource.h
+│
+├───screenshots
+│       gameplay.gif
+│       main-menu.png
+│       settings.png
+│
+└───third_party
+        json.hpp
+        json_fwd.hpp
+        miniaudio.h
 ```
 
 ---
@@ -51,15 +87,12 @@ PingPong/
 |--------------|--------------------|
 | Player 1 Up  | `W` / `Z` (AZERTY) |
 | Player 1 Down | `S`               |
-| Player 1 Left | `Q`               |
-| Player 1 Right | `D`               |
 | Player 2 Up  | Up Arrow           |
 | Player 2 Down | Down Arrow         |
-| Player 2 Right | Right Arrow         |
-| Player 2 Left | Left Arrow         |
 | Navigate Menus | Up / Down Arrows  |
+| Change Settings| Left / Right Arrows |
 | Select / Confirm | Enter            |
-| Back         | Enter             |
+| Back         | Esc             |
 
 ---
 
@@ -67,7 +100,7 @@ PingPong/
 
 **Requirements:**
 - Windows OS  
-- C++17 or higher  
+- C++23 or higher  
 - MinGW, Visual Studio, or Clang toolchain  
 
 ### 🧩 Build using `build.bat`
@@ -78,7 +111,7 @@ build.bat
 
 ### Manual build (example using MinGW / g++)
 ```bash
-g++ main.cpp app_res.o -o PingPong.exe -luser32 -lgdi32 -std=c++17
+g++ main.cpp app_res.o -o pingpong.exe -luser32 -lgdi32 -std=c++23
 ```
 
 ## 🧭 Technical Highlights
@@ -99,6 +132,10 @@ Settings are available in the menu and include:
 - **Paddle Speed** — tuning for paddle responsiveness  
 - **Paddle Friction/Damping** — configurable paddle friction rate
 - **AI Difficulty** — selectable levels (Easy / Normal / Hard)  
+- **Enable Music** — whether to play music or not
+- **Music Volume** — adjustable music volume (0 to 100%)
+- **SFX Volume** — increasing or decreasing the sound effects volume like button clicking, navigation...etc
+- **Game Duration** — adjusting the duration of each game (until game says the winner)
 
 Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
 
@@ -106,9 +143,9 @@ Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
 
 ## 🧩 Roadmap
 
-- [ ] Add sound effects and background music  
-- [ ] High score saving / local persistence  
-- [ ] More polished menu transitions & animations  
+- [x] Add sound effects and background music  
+- [x] Local config persistence  
+- [x] More polished menu transitions & animations  
 - [ ] Local multiplayer / shared keyboard improvements
 - [ ] Theme support (retro neon, dark/light)
 
