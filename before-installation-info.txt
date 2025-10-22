@@ -1,0 +1,18 @@
+Welcome to the Setup Wizard for Ping Pong Game!
+==================================================
+
+Thank you for downloading our game.  
+This project was made as a fun and educational experiment.
+You’re free to install, play, and even look at or edit the code if you’re interested in how it works.
+
+This setup will guide you through the installation process.
+
+Before continuing:
+• Close any running applications.  
+• Ensure you have sufficient disk space available.  
+• Administrative privileges may be required.
+
+Installation will copy the necessary game files and create a desktop shortcut.
+
+Click “Next” to continue with the installation.
+Enjoy the experience — and have fun exploring how it was made!

@@ -1,0 +1,17 @@
+Installation Complete!
+======================
+
+Ping Pong Game has been successfully installed on your computer.
+
+Thank you for trying out this simple game project.
+Remember — it was built mainly for learning and experimenting with code.
+Feel free to open the project folder, check the source, and modify anything to learn more.
+
+You can now start the game using:
+• The desktop shortcut, or  
+• The entry in your Start Menu.
+
+We hope you enjoy playing!  
+Contact us at: mono404fun@gmail.com.
+
+Thank you for installing and supporting independent game development!

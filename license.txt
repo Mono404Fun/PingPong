@@ -1,0 +1,6 @@
+Simple License
+
+This game project was created for learning and personal experimentation.
+You are free to explore, modify, and share it for educational or non-commercial purposes.
+
+There are no warranties or guarantees — use it at your own risk and enjoy learning!

@@ -281,7 +281,7 @@ inline void process_button(MSG message) {
 
 namespace audio {
 
-bool enabled = false;
+bool enabled = true;
 bool initialized = false;
 
 float music_volume = 1.0f;
@@ -1038,9 +1038,9 @@ struct Config {
   std::string filename;
   json data;
 
-  float paddle_speed = 1.0f;
-  float paddle_damping = 1.0f;
-  float ball_speed = 1.4f;
+  float paddle_speed = 2.0f;
+  float paddle_damping = 1.5f;
+  float ball_speed = 2.0f;
   float game_duration_secs = 30.0f;
   objects::AIDifficulty ai_difficulty = static_cast<objects::AIDifficulty>(1);
 
