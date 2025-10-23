@@ -117,13 +117,16 @@ Use **Left/Right arrows** to change values and **Enter** to confirm or go back.
 ## 📸 Screenshots
 
 ### 🎮 Main Menu:
-![Main Menu](screenshots/main-menu.png)
+![Main Menu](screenshots/main-menu.gif)
 
 ### ⚙  Settings:
-![Settings](screenshots/settings.png)
+![Settings](screenshots/settings-menu.gif)
 
 ### 🕹 Gameplay:
-![Gameplay](screenshots/gameplay.gif)
+![Gameplay](screenshots/game-play.gif)
+
+### ⏸ Pause Menu:
+![PauseMenu](screenshots/restart-game.gif)
 
 ---
 
